@@ -1,0 +1,98 @@
+/*
+===============================================================================
+SQL Script: Load All Tables from CSV Files
+===============================================================================
+What This Script Does:
+    Loads data from 6 CSV files into your database tables.
+    
+    CSV File                 →  Database Table
+    ─────────────────────────────────────────────────
+    cust_info.csv           →  crm_cust_info
+    prd_info.csv            →  crm_prd_info
+    sales_details.csv       →  crm_sales_details
+    cust_az12.csv           →  erp_cust_az12
+    LOC_A101.csv            →  erp_loc_a101
+    PX_CAT_G1V2.csv         →  erp_px_cat_g1v2
+
+Before Running:
+    ✓ Make sure all CSV files are in: 
+      C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/
+    ✓ Make sure your database tables exist and are empty
+
+How to Run:
+    Option 1: Open this file in MySQL Workbench and click Execute (⚡)
+    Option 2: Run from command line:
+              mysql -u username -p database_name < load_all_tables.sql
+
+What Happens:
+    - Reads each CSV file
+    - Skips the header row
+    - Loads all data into the matching table
+    - Cleans up empty values (converts them to NULL)
+
+Tip: If you need to reload data, delete old data from tables first!
+===============================================================================
+*/
+
+-- Load crm_cust_info table
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/cust_info.csv'
+INTO TABLE crm_cust_info
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(@cst_id, @cst_key, @cst_firstname, @cst_lastname, @cst_marital_status, @cst_gndr, @cst_create_date)
+SET
+  cst_id = NULLIF(TRIM(@cst_id), ''),
+  cst_key = NULLIF(TRIM(@cst_key), ''),
+  cst_firstname = NULLIF(TRIM(@cst_firstname), ''),
+  cst_lastname = NULLIF(TRIM(@cst_lastname), ''),
+  cst_marital_status = NULLIF(TRIM(@cst_marital_status), ''),
+  cst_gndr = NULLIF(TRIM(@cst_gndr), ''),
+  cst_create_date = NULLIF(TRIM(@cst_create_date), '');
+
+-- Load crm_prd_info table
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/prd_info.csv'
+INTO TABLE crm_prd_info
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(prd_id, prd_key, prd_nm, prd_cost, prd_line, prd_start_dt, prd_end_dt);
+
+-- Load crm_sales_details table
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/sales_details.csv'
+INTO TABLE crm_sales_details 
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+-- Load erp_cust_az12 table
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/cust_az12.csv'
+INTO TABLE erp_cust_az12
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(@CID, @BDATE, @GEN)
+SET
+  CID = NULLIF(@CID, ''),
+  BDATE = NULLIF(@BDATE, ''),
+  GEN = NULLIF(@GEN, '');
+
+-- Load erp_loc_a101 table
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/LOC_A101.csv'
+INTO TABLE erp_loc_a101
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+-- Load erp_px_cat_g1v2 table
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/PX_CAT_G1V2.csv'
+INTO TABLE erp_px_cat_g1v2
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
