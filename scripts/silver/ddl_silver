@@ -1,1 +1,447 @@
+/*
+===============================================================================
+DDL Script: Data Warehouse Setup - Silver Layer
+===============================================================================
+Script Purpose:
+    This script sets up the complete silver layer data warehouse structure,
+    including table creation, stored procedures, and data loading from CSV files.
+    Run this script to define and populate all silver layer tables.
 
+Database: data_warehouse
+Layer: Silver (cleaned and structured data from bronze sources)
+
+===============================================================================
+*/
+
+-- ============================================
+-- DATABASE SELECTION
+-- ============================================
+USE data_warehouse;
+
+/*
+===============================================================================
+Section 1: Silver Tables (Raw Data Schema)
+===============================================================================
+Purpose:
+    Creates the initial silver tables for customers and sales data.
+    These tables store raw data with timestamps for tracking data lineage.
+===============================================================================
+*/
+
+-- ============================================
+-- SILVER TABLES (RAW DATA)
+-- ============================================
+
+-- Silver Customers Table
+CREATE TABLE silver_customers (
+    customer_id INT,
+    name VARCHAR(100),
+    email VARCHAR(150),
+    raw_load_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Silver Sales Table
+CREATE TABLE silver_sales (
+    sale_id INT,
+    customer_id INT,
+    amount DECIMAL(10,2),
+    sale_date DATE,
+    raw_load_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create duplicate silver tables (cleaned data versions)
+CREATE TABLE silver_customers LIKE silver_customers;
+CREATE TABLE silver_sales LIKE silver_sales;
+
+/*
+===============================================================================
+Section 2: Gold Tables (Aggregated/Analytics-Ready)
+===============================================================================
+Purpose:
+    Creates gold layer tables containing aggregated and analytics-ready data.
+    These tables are optimized for reporting and business intelligence queries.
+===============================================================================
+*/
+
+-- ============================================
+-- GOLD TABLES (AGGREGATED / ANALYTICS-READY)
+-- ============================================
+
+-- Gold Customer Sales Summary
+CREATE TABLE gold_customer_sales (
+    customer_id INT,
+    total_spent DECIMAL(10,2),
+    last_purchase DATE
+);
+
+-- View silver sales data
+SELECT * FROM silver_sales;
+
+/*
+===============================================================================
+Section 3: Stored Procedure - Load Silver Layer
+===============================================================================
+Purpose:
+    Creates a stored procedure that:
+    1. Drops and recreates all silver layer tables
+    2. Transforms bronze layer data into structured silver tables
+    3. Creates tables for CRM and ERP source systems
+    
+Tables Created:
+    - crm_cust_info: Customer information from CRM system
+    - crm_sales_details: Sales transactions from CRM system
+    - crm_prd_info: Product information from CRM system
+    - erp_cust_az12: Customer data from ERP system (AZ12)
+    - erp_loc_a101: Location data from ERP system (A101)
+    - erp_px_cat_g1v2: Product category data from ERP system
+
+Usage:
+    CALL load_silver();
+===============================================================================
+*/
+
+-- ============================================
+-- STORED PROCEDURE: LOAD SILVER LAYER
+-- ============================================
+
+DROP PROCEDURE IF EXISTS load_silver;
+
+DELIMITER $$
+
+CREATE PROCEDURE load_silver()
+BEGIN
+    -- ============================================
+    -- CRM CUSTOMER INFO TABLE
+    -- ============================================
+    DROP TABLE IF EXISTS crm_cust_info; 
+    CREATE TABLE crm_cust_info (
+        cst_id VARCHAR(50),
+        cst_key VARCHAR(50),
+        cst_firstname VARCHAR(50),
+        cst_lastname VARCHAR(50),
+        cst_marital_status VARCHAR(50),
+        cst_gndr VARCHAR(50),
+        cst_create_date VARCHAR(50),
+        dwh_load_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    -- Load customer data from bronze layer
+    INSERT INTO crm_cust_info (cst_id, cst_key, cst_firstname, cst_lastname)
+    SELECT 
+        customer_id,
+        customer_id,
+        SUBSTRING_INDEX(name, ' ', 1),  -- Extract first name
+        SUBSTRING_INDEX(name, ' ', -1)  -- Extract last name
+    FROM bronze_customers;
+    
+    -- ============================================
+    -- CRM SALES DETAILS TABLE
+    -- ============================================
+    DROP TABLE IF EXISTS crm_sales_details;
+    CREATE TABLE crm_sales_details (
+        sls_ord_num VARCHAR(50),
+        sls_prd_key VARCHAR(50),
+        sls_cust_id INT,
+        sls_order_dt VARCHAR(50),
+        sls_ship_dt VARCHAR(50),
+        sls_due_dt VARCHAR(50),
+        sls_sales VARCHAR(50),
+        sls_quantity VARCHAR(50),
+        sls_price VARCHAR(50),
+        dwh_load_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    -- Load sales data from bronze layer
+    INSERT INTO crm_sales_details (sls_ord_num, sls_cust_id, sls_sales, sls_order_dt)
+    SELECT 
+        sale_id,
+        customer_id,
+        amount,
+        sale_date
+    FROM bronze_sales;
+    
+    -- ============================================
+    -- CRM PRODUCT INFO TABLE
+    -- ============================================
+    DROP TABLE IF EXISTS crm_prd_info;
+    CREATE TABLE crm_prd_info (
+        prd_id INT,
+        prd_key VARCHAR(50),
+        prd_nm VARCHAR(50),
+        prd_cost VARCHAR(50),
+        prd_line VARCHAR(50),
+        prd_start_dt DATETIME,
+        prd_end_dt VARCHAR(50),
+        dwh_load_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    -- ============================================
+    -- ERP CUSTOMER TABLE (AZ12)
+    -- ============================================
+    DROP TABLE IF EXISTS erp_cust_az12;
+    CREATE TABLE erp_cust_az12 (
+        CID VARCHAR(50),
+        BDATE VARCHAR(50),
+        GEN VARCHAR(50),
+        dwh_load_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    -- ============================================
+    -- ERP LOCATION TABLE (A101)
+    -- ============================================
+    DROP TABLE IF EXISTS erp_loc_a101;
+    CREATE TABLE erp_loc_a101 (
+        CID VARCHAR(50),
+        CNTRY VARCHAR(50),
+        dwh_load_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    -- ============================================
+    -- ERP PRODUCT CATEGORY TABLE (PX_CAT_G1V2)
+    -- ============================================
+    DROP TABLE IF EXISTS erp_px_cat_g1v2;
+    CREATE TABLE erp_px_cat_g1v2 (
+        ID VARCHAR(50),
+        CAT VARCHAR(50),
+        SUBCAT VARCHAR(50),
+        MAINTENANCE VARCHAR(50),
+        dwh_load_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    
+END$$
+
+DELIMITER ;
+
+/*
+===============================================================================
+Section 4: Execute Stored Procedure
+===============================================================================
+Purpose:
+    Executes the load_silver procedure to create and populate all silver tables.
+===============================================================================
+*/
+
+-- ============================================
+-- EXECUTE PROCEDURE
+-- ============================================
+
+-- Run the silver layer load procedure
+CALL load_silver();
+
+/*
+===============================================================================
+Section 5: Data Verification Queries
+===============================================================================
+Purpose:
+    Provides queries to verify successful data loading and preview table contents.
+    Use these queries to validate the ETL process.
+===============================================================================
+*/
+
+-- ============================================
+-- DATA VERIFICATION QUERIES
+-- ============================================
+
+-- Verify row counts for all tables
+SELECT 'crm_cust_info' AS table_name, COUNT(*) AS row_count FROM crm_cust_info
+UNION ALL
+SELECT 'crm_sales_details', COUNT(*) FROM crm_sales_details
+UNION ALL
+SELECT 'crm_prd_info', COUNT(*) FROM crm_prd_info;
+
+-- Preview customer data
+SELECT * FROM crm_cust_info LIMIT 5;
+
+-- Preview sales data
+SELECT * FROM crm_sales_details LIMIT 5;
+
+/*
+===============================================================================
+Section 6: CSV Data Loading Configuration and Execution
+===============================================================================
+Purpose:
+    Configures MySQL to accept local file uploads and loads data from CSV files
+    into silver layer tables.
+
+Prerequisites:
+    - CSV files must be placed in: C:\ProgramData\MySQL\MySQL Server 8.0\Uploads\
+    - local_infile must be enabled (handled by script)
+    - Proper file permissions must be set
+
+CSV Files Required:
+    1. cust_info.csv - Customer information
+    2. prd_info.csv - Product information
+    3. sales_details.csv - Sales transaction details
+    4. cust_az12.csv - ERP customer data
+    5. LOC_A101.csv - ERP location data
+    6. PX_CAT_G1V2.csv - ERP product category data
+
+Note: Adjust file paths if your MySQL upload directory differs.
+===============================================================================
+*/
+
+-- ============================================
+-- CONFIGURATION: ENABLE LOCAL FILE LOADING
+-- ============================================
+SET GLOBAL local_infile = 1;
+SHOW VARIABLES LIKE 'local_infile';
+SHOW VARIABLES LIKE "secure_file_priv";
+
+/*
+-------------------------------------------------------------------------------
+Load: CRM Customer Info (cust_info.csv)
+-------------------------------------------------------------------------------
+*/
+-- ============================================
+-- LOAD: CRM CUSTOMER INFO
+-- ============================================
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/cust_info.csv'
+INTO TABLE crm_cust_info
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(@cst_id, @cst_key, @cst_firstname, @cst_lastname, @cst_marital_status, @cst_gndr, @cst_create_date)
+SET
+  cst_id = NULLIF(TRIM(@cst_id), ''),
+  cst_key = NULLIF(TRIM(@cst_key), ''),
+  cst_firstname = NULLIF(TRIM(@cst_firstname), ''),
+  cst_lastname = NULLIF(TRIM(@cst_lastname), ''),
+  cst_marital_status = NULLIF(TRIM(@cst_marital_status), ''),
+  cst_gndr = NULLIF(TRIM(@cst_gndr), ''),
+  cst_create_date = NULLIF(TRIM(@cst_create_date), '');
+
+/*
+-------------------------------------------------------------------------------
+Load: CRM Product Info (prd_info.csv)
+-------------------------------------------------------------------------------
+*/
+-- ============================================
+-- LOAD: CRM PRODUCT INFO
+-- ============================================
+SET GLOBAL local_infile = 1;
+SHOW VARIABLES LIKE 'local_infile';
+SHOW VARIABLES LIKE "secure_file_priv";
+
+LOAD DATA INFILE 'C:\\ProgramData\\MySQL\\MySQL Server 8.0\\Uploads\\prd_info.csv'
+INTO TABLE crm_prd_info
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(prd_id, prd_key, prd_nm, prd_cost, prd_line, prd_start_dt, prd_end_dt);
+
+/*
+-------------------------------------------------------------------------------
+Load: CRM Sales Details (sales_details.csv)
+-------------------------------------------------------------------------------
+*/
+-- ============================================
+-- LOAD: CRM SALES DETAILS
+-- ============================================
+SET GLOBAL local_infile = 1;
+SHOW VARIABLES LIKE 'local_infile';
+SHOW VARIABLES LIKE "secure_file_priv";
+
+LOAD DATA INFILE 'C:\\ProgramData\\MySQL\\MySQL Server 8.0\\Uploads\\sales_details.csv'
+INTO TABLE crm_sales_details 
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(@col1, @col2, @col3, @col4, @col5, @col6, @col7, @col8, @col9)
+SET
+  sls_ord_num = NULLIF(TRIM(@col1), ''),
+  sls_prd_key = NULLIF(TRIM(@col2), ''),
+  sls_cust_id = NULLIF(TRIM(@col3), ''),
+  sls_order_dt = NULLIF(TRIM(@col4), ''),
+  sls_ship_dt = NULLIF(TRIM(@col5), ''),
+  sls_due_dt = NULLIF(TRIM(@col6), ''),
+  sls_sales = NULLIF(TRIM(@col7), ''),
+  sls_quantity = NULLIF(TRIM(@col8), ''),
+  sls_price = NULLIF(TRIM(@col9), '');
+
+/*
+-------------------------------------------------------------------------------
+Load: ERP Customer Data (cust_az12.csv)
+-------------------------------------------------------------------------------
+*/
+-- ============================================
+-- LOAD: ERP CUSTOMER (AZ12)
+-- ============================================
+SET GLOBAL local_infile = 1;
+SHOW VARIABLES LIKE 'local_infile';
+SHOW VARIABLES LIKE "secure_file_priv";
+
+LOAD DATA INFILE 'C:\\ProgramData\\MySQL\\MySQL Server 8.0\\Uploads\\cust_az12.csv'
+INTO TABLE erp_cust_az12
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(@CID, @BDATE, @GEN)
+SET
+  CID = NULLIF(@CID, ''),
+  BDATE = NULLIF(@BDATE, ''),
+  GEN = NULLIF(@GEN, '');
+
+/*
+-------------------------------------------------------------------------------
+Load: ERP Location Data (LOC_A101.csv)
+-------------------------------------------------------------------------------
+*/
+-- ============================================
+-- LOAD: ERP LOCATION (A101)
+-- ============================================
+SET GLOBAL local_infile = 1;
+SHOW VARIABLES LIKE 'local_infile';
+SHOW VARIABLES LIKE "secure_file_priv";
+
+LOAD DATA INFILE 'C:\\ProgramData\\MySQL\\MySQL Server 8.0\\Uploads\\LOC_A101.csv'
+INTO TABLE erp_loc_a101 
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(@CID, @CNTRY)
+SET
+  CID = NULLIF(TRIM(@CID), ''),
+  CNTRY = NULLIF(TRIM(@CNTRY), '');
+
+/*
+-------------------------------------------------------------------------------
+Load: ERP Product Category Data (PX_CAT_G1V2.csv)
+-------------------------------------------------------------------------------
+*/
+-- ============================================
+-- LOAD: ERP PRODUCT CATEGORY (PX_CAT_G1V2)
+-- ============================================
+SET GLOBAL local_infile = 1;
+SHOW VARIABLES LIKE 'local_infile';
+SHOW VARIABLES LIKE "secure_file_priv";
+
+LOAD DATA INFILE 'C:\\ProgramData\\MySQL\\MySQL Server 8.0\\Uploads\\PX_CAT_G1V2.csv'
+INTO TABLE erp_px_cat_g1v2
+FIELDS TERMINATED BY ','
+OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(@ID, @CAT, @SUBCAT, @MAINTENANCE)
+SET
+  ID = NULLIF(TRIM(@ID), ''),
+  CAT = NULLIF(TRIM(@CAT), ''),
+  SUBCAT = NULLIF(TRIM(@SUBCAT), ''),
+  MAINTENANCE = NULLIF(TRIM(@MAINTENANCE), '');
+
+/*
+===============================================================================
+End of Script
+===============================================================================
+Script completed. All silver layer tables have been created and populated.
+
+Next Steps:
+    1. Verify data loading using the verification queries above
+    2. Check row counts match expected values
+    3. Proceed with gold layer transformations
+===============================================================================
+*/
