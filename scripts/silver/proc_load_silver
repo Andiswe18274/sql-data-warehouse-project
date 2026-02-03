@@ -185,7 +185,8 @@ BEGIN
     -- Transformations:
     --   - Convert YYYYMMDD integer dates to DATE format
     --   - Validate and recalculate sales amounts
-    --   - Handle invalid/zero values
+    --   - Handle invalid/zero values with NULL safety
+    -- FIXED: Improved price and sales calculations
     -- -----------------------------------------------------
     SET start_time = NOW();
     SELECT '>> Truncating Table: silver_crm_sales_details' AS message;
@@ -219,20 +220,32 @@ BEGIN
             WHEN sls_due_dt = 0 OR LENGTH(sls_due_dt) != 8 THEN NULL
             ELSE STR_TO_DATE(sls_due_dt, '%Y%m%d')
         END AS sls_due_dt,
+        -- FIXED: Calculate sales amount with proper NULL handling
         CASE 
-            WHEN sls_sales IS NULL 
-              OR sls_sales <= 0 
-              OR sls_sales != sls_quantity * ABS(sls_price) 
-                THEN sls_quantity * ABS(sls_price)
+            WHEN sls_sales IS NULL OR sls_sales <= 0 THEN 
+                CASE 
+                    WHEN sls_quantity IS NOT NULL AND sls_quantity > 0 AND sls_price IS NOT NULL 
+                        THEN sls_quantity * sls_price
+                    ELSE NULL
+                END
+            WHEN sls_quantity IS NOT NULL AND sls_price IS NOT NULL 
+                 AND sls_sales != (sls_quantity * sls_price) THEN
+                sls_quantity * sls_price
             ELSE sls_sales
         END AS sls_sales,
         sls_quantity,
+        -- FIXED: Calculate price with proper NULL and zero handling
         CASE 
-            WHEN sls_price IS NULL OR sls_price <= 0 
-                THEN sls_sales / NULLIF(sls_quantity, 0)
+            WHEN sls_price IS NULL OR sls_price <= 0 THEN 
+                CASE 
+                    WHEN sls_sales IS NOT NULL AND sls_quantity IS NOT NULL AND sls_quantity > 0 
+                        THEN sls_sales / sls_quantity
+                    ELSE NULL
+                END
             ELSE sls_price
         END AS sls_price
-    FROM crm_sales_details;
+    FROM crm_sales_details
+    WHERE sls_quantity IS NOT NULL AND sls_quantity > 0;  -- Filter out invalid records
     
     SET end_time = NOW();
     SET duration = TIMESTAMPDIFF(SECOND, start_time, end_time);
