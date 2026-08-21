@@ -49,7 +49,7 @@ Develop SQL-based analytics to deliver detailed insights into:
 
 - **Customer Behavior** — Top customers, segmentation, revenue by country and gender
 - **Product Performance** — Best sellers, category revenue, profitability and margins
-- **Sales Trends** — Monthly and yearly trends, month-over-month growth, shipping performance
+- **Sales Trends** — Monthly and yearly trends, month-over-month growth, shipping performance.
 
 These insights empower stakeholders with key business metrics, enabling strategic decision-making.
 
